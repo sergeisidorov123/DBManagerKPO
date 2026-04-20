@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Guitar Config Manager</title>
+    <style>
+      body{font-family:Arial;margin:20px}
+      .artist{margin:8px 0}
+      .song{margin-left:20px}
+      .tuning{margin-left:40px}
+      button{margin-left:6px}
+    </style>
+  </head>
+  <body>
+    <h1>Guitar Config Manager</h1>
+    <div id="auth">
+      <input id="username" placeholder="Username" />
+      <input id="password" placeholder="Password" type="password" />
+      <button id="btn-login">Login</button>
+      <button id="btn-register">Register</button>
+      <button id="btn-logout" style="display:none">Logout</button>
+    </div>
+    <div id="artist-controls" style="display:none">
+      <input id="new-artist" placeholder="New artist" />
+      <button id="add-artist">Add Artist</button>
+    </div>
+    <div id="admin-panel" style="display:none; margin-top:20px; border-top:1px solid #ccc; padding-top:10px;">
+      <h2>Admin Panel</h2>
+      <button id="admin-refresh">Refresh Users</button>
+      <div id="admin-users" style="margin-top:8px; font-family:monospace;"></div>
+    </div>
+    <div id="tree"></div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

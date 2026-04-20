@@ -1,0 +1,8 @@
+SQLAlchemy>=2.0
+psycopg2-binary
+Werkzeug
+python-dotenv
+fastapi
+uvicorn[standard]
+jinja2
+aiofiles
