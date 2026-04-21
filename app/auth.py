@@ -1,6 +1,28 @@
+import os
+import hmac
+import hashlib
 from werkzeug.security import generate_password_hash, check_password_hash
 from .models import User
 from .db import SessionLocal
+
+# Token signing secret
+_SECRET = os.getenv('SECRET_KEY', 'dev-secret').encode()
+
+
+def make_token(username: str) -> str:
+    sig = hmac.new(_SECRET, username.encode(), hashlib.sha256).hexdigest()
+    return f"{username}:{sig}"
+
+
+def verify_token(token: str) -> str | None:
+    try:
+        username, sig = token.rsplit(':', 1)
+    except Exception:
+        return None
+    expected = hmac.new(_SECRET, username.encode(), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected, sig):
+        return username
+    return None
 
 
 def register_user(username: str, password: str):
@@ -48,9 +70,8 @@ def get_user_by_id(user_id: int):
 def set_admin(user_id: int, value: bool):
     db = SessionLocal()
     try:
-        if value:
-            # ensure only one admin: demote others first
-            db.query(User).update({User.is_admin: False})
+        #if value:
+          #  db.query(User).update({User.is_admin: False})
         u = db.get(User, user_id)
         if not u:
             return False

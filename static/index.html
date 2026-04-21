@@ -2,17 +2,165 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Guitar Config Manager</title>
     <style>
-      body{font-family:Arial;margin:20px}
-      .artist{margin:8px 0}
-      .song{margin-left:20px}
-      .tuning{margin-left:40px}
-      button{margin-left:6px}
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      h1 { color: #333; margin-top: 0; }
+      h2 { color: #666; font-size: 1.3em; margin: 1em 0 0.5em; }
+      
+      div#auth, div#artist-controls, div#export-buttons {
+        background: white;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      
+      input[type="text"], input[type="password"] {
+        padding: 8px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        font-size: 14px;
+      }
+
+      button {
+        padding: 8px 16px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+      }
+
+      button:hover { background-color: #0052a3; }
+      button:active { background-color: #003d7a; }
+
+      button.del-artist, button.del-song, button.del-tuning,
+      button.promote-user, button.demote-user, button.delete-user {
+        background-color: #d32f2f;
+        padding: 4px 8px;
+        font-size: 12px;
+        margin-left: 4px;
+      }
+
+      button.del-artist:hover, button.del-song:hover, button.del-tuning:hover,
+      button.promote-user:hover, button.demote-user:hover, button.delete-user:hover {
+        background-color: #b71c1c;
+      }
+
+      button.add-song, button.add-tuning { background-color: #388e3c; font-size: 12px; padding: 4px 8px; }
+      button.add-song:hover, button.add-tuning:hover { background-color: #2e7d32; }
+
+      button.edit-user { background-color: #f57c00; font-size: 12px; padding: 4px 8px; }
+      button.edit-user:hover { background-color: #e65100; }
+
+      .artist {
+        background: white;
+        padding: 12px;
+        margin: 10px 0;
+        border-left: 4px solid #0066cc;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: box-shadow 0.2s;
+      }
+
+      .artist:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+      
+      .song {
+        margin: 8px 0 8px 20px;
+        padding: 8px;
+        background: #fafafa;
+        border-left: 3px solid #388e3c;
+        border-radius: 3px;
+      }
+
+      .tuning {
+        margin: 6px 0 6px 30px;
+        padding: 6px;
+        background: #f0f0f0;
+        border-left: 2px solid #f57c00;
+        border-radius: 2px;
+        font-size: 13px;
+      }
+
+      .artist strong { color: #0066cc; }
+      
+      #tree { margin-top: 20px; }
+
+      div#admin-panel {
+        background: white;
+        margin-top: 20px;
+        padding: 15px;
+        border-top: 2px solid #ccc;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+
+      div#admin-users { margin-top: 12px; }
+
+      .admin-user {
+        background: #f9f9f9;
+        padding: 8px;
+        margin: 6px 0;
+        border-left: 3px solid #f57c00;
+        border-radius: 3px;
+        font-size: 14px;
+      }
+
+      #context-menu {
+        display: none;
+        position: absolute;
+        z-index: 10000;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+
+      #context-menu div { margin: 2px 0; }
+      #context-menu button { margin: 0; padding: 6px 12px; font-size: 13px; }
+
+      #export-buttons { margin-bottom: 15px; }
+      #export-buttons button { background-color: #7b1fa2; margin-right: 8px; }
+      #export-buttons button:hover { background-color: #6a1b9a; }
+
+      input.new-song, input.new-tuning, input.new-tuning-notes {
+        padding: 4px;
+        font-size: 12px;
+        width: 120px;
+      }
+
+      input.new-tuning-notes { width: 150px; }
+
+      @media (max-width: 768px) {
+        body { padding: 10px; }
+        input[type="text"], input[type="password"], input.new-song, input.new-tuning, input.new-tuning-notes {
+          width: 100%;
+          margin-bottom: 6px;
+        }
+        button { width: 100%; }
+        .song { margin-left: 10px; }
+        .tuning { margin-left: 20px; }
+      }
     </style>
   </head>
   <body>
-    <h1>Guitar Config Manager</h1>
+    <h1>🎸 Guitar Config Manager</h1>
+    
     <div id="auth">
       <input id="username" placeholder="Username" />
       <input id="password" placeholder="Password" type="password" />
@@ -20,16 +168,26 @@
       <button id="btn-register">Register</button>
       <button id="btn-logout" style="display:none">Logout</button>
     </div>
+    
     <div id="artist-controls" style="display:none">
       <input id="new-artist" placeholder="New artist" />
       <button id="add-artist">Add Artist</button>
     </div>
-    <div id="admin-panel" style="display:none; margin-top:20px; border-top:1px solid #ccc; padding-top:10px;">
-      <h2>Admin Panel</h2>
-      <button id="admin-refresh">Refresh Users</button>
-      <div id="admin-users" style="margin-top:8px; font-family:monospace;"></div>
+
+    <div id="export-buttons" style="display:none">
+      <button id="export-json-btn">📥 Export as JSON</button>
+      <button id="export-xml-btn">📥 Export as XML</button>
     </div>
+    
+    <div id="admin-panel" style="display:none">
+      <h2>👨‍💼 Admin Panel</h2>
+      <button id="admin-refresh">🔄 Refresh Users</button>
+      <div id="admin-users"></div>
+    </div>
+    
     <div id="tree"></div>
+    
+    <div id="context-menu"></div>
 
     <script src="/static/app.js"></script>
   </body>
