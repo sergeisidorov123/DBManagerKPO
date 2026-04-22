@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Guitar Config Manager</title>
+    <title>Config Manager</title>
     <style>
       * { box-sizing: border-box; }
       body {
@@ -159,7 +159,7 @@
     </style>
   </head>
   <body>
-    <h1>🎸 Guitar Config Manager</h1>
+    <h1>Guitar Config Manager</h1>
     
     <div id="auth">
       <input id="username" placeholder="Username" />
@@ -175,14 +175,29 @@
     </div>
 
     <div id="export-buttons" style="display:none">
-      <button id="export-json-btn">📥 Export as JSON</button>
-      <button id="export-xml-btn">📥 Export as XML</button>
+      <button id="export-json-btn">Export as JSON</button>
+      <button id="export-xml-btn">Export as XML</button>
     </div>
     
     <div id="admin-panel" style="display:none">
-      <h2>👨‍💼 Admin Panel</h2>
-      <button id="admin-refresh">🔄 Refresh Users</button>
+      <h2>Admin Panel</h2>
+      <button id="admin-refresh">Refresh Users</button>
       <div id="admin-users"></div>
+      <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+      <h3>Audit Log</h3>
+      <button id="admin-refresh-logs">Refresh Logs</button>
+      <table id="audit-log-table" style="width:100%; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+          <tr style="background: #f0f0f0; border-bottom: 2px solid #ddd;">
+            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Timestamp</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">User</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Action</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Target Type</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #ddd;">Target ID</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
     
     <div id="tree"></div>

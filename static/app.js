@@ -59,7 +59,11 @@ async function load() {
         const sdiv = document.createElement('div'); sdiv.className='song';
         sdiv.dataset.id = s.id;
         sdiv.draggable = true;
-        let sinner = `${s.title}`;
+        let sinner = '';
+        if (s.has_tunings) {
+          sinner += `<button class='expand-song' data-sid='${s.id}'>+</button> `;
+        }
+        sinner += `${s.title}`;
         if(isAuth) sinner += ` <button data-s='${s.id}' class='del-song'>Delete</button>`;
         sinner += ` <input placeholder='New tuning' data-sid='${s.id}' class='new-tuning'/> <input placeholder='Notes' data-sid-notes='${s.id}' class='new-tuning-notes'/> <button class='add-tuning' data-sid='${s.id}'>Add Tuning</button>`;
         sdiv.innerHTML = sinner;
@@ -81,8 +85,10 @@ async function load() {
   }
   attachHandlers();
   attachDragHandlers();
+  attachExpandSongHandlers();
   if (isAdmin) {
     await loadAdminUsers();
+    await loadAuditLog();
   } else {
     const adminUsersDiv = document.getElementById('admin-users');
     if (adminUsersDiv) adminUsersDiv.innerHTML = '';
@@ -91,26 +97,88 @@ async function load() {
   // attach expand handlers for on-demand loading
   document.querySelectorAll('.expand-artist').forEach(b=>b.onclick=async()=>{
     const aid = b.dataset.aid;
-    try{
-      const songs = await fetchJSON(`/api/artists/${aid}/songs`);
-      // append songs under artist
-      const artistDiv = document.querySelector(`.artist[data-id="${aid}"]`);
-      if (!artistDiv) return;
-      for (const s of songs) {
-        // avoid duplicates
-        if (artistDiv.querySelector(`.song[data-id="${s.id}"]`)) continue;
-        const sdiv = document.createElement('div'); sdiv.className='song'; sdiv.dataset.id = s.id; sdiv.draggable = true;
-        let sinner = `${s.title}`;
-        if(isAuth) sinner += ` <button data-s='${s.id}' class='del-song'>Delete</button>`;
-        sinner += ` <input placeholder='New tuning' data-sid='${s.id}' class='new-tuning'/> <input placeholder='Notes' data-sid-notes='${s.id}' class='new-tuning-notes'/> <button class='add-tuning' data-sid='${s.id}'>Add Tuning</button>`;
-        sdiv.innerHTML = sinner;
-        artistDiv.appendChild(sdiv);
-        // if song has tunings, fetch them when expanded later (or show small indicator)
+    const isExpanded = b.textContent === '-';
+    const artistDiv = document.querySelector(`.artist[data-id="${aid}"]`);
+    if (!artistDiv) return;
+    
+    if (isExpanded) {
+      // Collapse: hide all songs
+      artistDiv.querySelectorAll('.song').forEach(s => s.style.display = 'none');
+      b.textContent = '+';
+      b.style.backgroundColor = '#ccc';
+    } else {
+      // Expand: show/load songs
+      const songs = artistDiv.querySelectorAll('.song');
+      if (songs.length > 0) {
+        // Already loaded, just show them
+        songs.forEach(s => s.style.display = 'block');
+        b.textContent = '-';
+        b.style.backgroundColor = '#ff9800';
+      } else {
+        // Load from server
+        try{
+          const songsList = await fetchJSON(`/api/artists/${aid}/songs`);
+          for (const s of songsList) {
+            const sdiv = document.createElement('div'); sdiv.className='song'; sdiv.dataset.id = s.id; sdiv.draggable = true;
+            let sinner = '';
+            if (s.has_tunings) {
+              sinner += `<button class='expand-song' data-sid='${s.id}'>+</button> `;
+            }
+            sinner += `${s.title}`;
+            if(isAuth) sinner += ` <button data-s='${s.id}' class='del-song'>Delete</button>`;
+            sinner += ` <input placeholder='New tuning' data-sid='${s.id}' class='new-tuning'/> <input placeholder='Notes' data-sid-notes='${s.id}' class='new-tuning-notes'/> <button class='add-tuning' data-sid='${s.id}'>Add Tuning</button>`;
+            sdiv.innerHTML = sinner;
+            artistDiv.appendChild(sdiv);
+          }
+          attachHandlers(); attachDragHandlers(); attachExpandSongHandlers();
+          b.textContent = '-';
+          b.style.backgroundColor = '#ff9800';
+        }catch(e){alert('Failed loading songs: '+e)}
       }
-      attachHandlers(); attachDragHandlers();
-      // remove expand button after load
-      b.remove();
-    }catch(e){alert('Failed loading songs: '+e)}
+    }
+  });
+
+  attachExpandSongHandlers();
+}
+
+function attachExpandSongHandlers() {
+  // attach expand handlers for songs
+  document.querySelectorAll('.expand-song').forEach(b=>b.onclick=async()=>{
+    const sid = b.dataset.sid;
+    const isExpanded = b.textContent === '-';
+    const songDiv = document.querySelector(`.song[data-id="${sid}"]`);
+    if (!songDiv) return;
+    
+    if (isExpanded) {
+      // Collapse: hide all tunings
+      songDiv.querySelectorAll('.tuning').forEach(t => t.style.display = 'none');
+      b.textContent = '+';
+      b.style.backgroundColor = '#ccc';
+    } else {
+      // Expand: show/load tunings
+      const tunings = songDiv.querySelectorAll('.tuning');
+      if (tunings.length > 0) {
+        // Already loaded, just show them
+        tunings.forEach(t => t.style.display = 'block');
+        b.textContent = '-';
+        b.style.backgroundColor = '#ff9800';
+      } else {
+        // Load from server
+        try{
+          const loadedTunings = await fetchJSON(`/api/songs/${sid}/tunings`);
+          for (const t of loadedTunings) {
+            const tdiv = document.createElement('div'); tdiv.className='tuning'; tdiv.dataset.id = t.id; tdiv.draggable = true;
+            let tinner = `${t.name} ${t.notes?'- '+t.notes:''}`;
+            if(isAuth) tinner += ` <button data-t='${t.id}' class='del-tuning'>Delete</button>`;
+            tdiv.innerHTML = tinner;
+            songDiv.appendChild(tdiv);
+          }
+          attachHandlers(); attachDragHandlers(); attachExpandSongHandlers();
+          b.textContent = '-';
+          b.style.backgroundColor = '#ff9800';
+        }catch(e){alert('Failed loading tunings: '+e)}
+      }
+    }
   });
 }
 
@@ -139,12 +207,27 @@ function addSongIncremental(artistId, song) {
   const sdiv = document.createElement('div'); sdiv.className='song';
   sdiv.dataset.id = song.id;
   sdiv.draggable = true;
-  let sinner = `${song.title}`;
+  let sinner = '';
+  // New songs don't have tunings yet
+  if (song.has_tunings) {
+    sinner += `<button class='expand-song' data-sid='${song.id}'>+</button> `;
+  }
+  sinner += `${song.title}`;
   if(isAuth) sinner += ` <button data-s='${song.id}' class='del-song'>Delete</button>`;
   sinner += ` <input placeholder='New tuning' data-sid='${song.id}' class='new-tuning'/> <input placeholder='Notes' data-sid-notes='${song.id}' class='new-tuning-notes'/> <button class='add-tuning' data-sid='${song.id}'>Add Tuning</button>`;
   sdiv.innerHTML = sinner;
   artistDiv.appendChild(sdiv);
+  
+  // Update artist expand button to minus if this is the first song
+  const artistExpandBtn = artistDiv.querySelector('.expand-artist');
+  if (artistExpandBtn && artistExpandBtn.textContent === '+') {
+    artistExpandBtn.textContent = '-';
+    artistExpandBtn.style.backgroundColor = '#ff9800';
+  }
+  
   attachHandlers();
+  attachDragHandlers();
+  attachExpandSongHandlers();
 }
 
 function deleteSongIncremental(songId) {
@@ -155,6 +238,17 @@ function deleteSongIncremental(songId) {
 function addTuningIncremental(songId, tuning) {
   const songDiv = document.querySelector(`.song[data-id="${songId}"]`);
   if (!songDiv) return;
+  
+  // Check if song has expand button, if not - add it
+  const existingExpandBtn = songDiv.querySelector('.expand-song');
+  if (!existingExpandBtn) {
+    const expandBtn = document.createElement('button');
+    expandBtn.className = 'expand-song';
+    expandBtn.dataset.sid = songId;
+    expandBtn.textContent = '+';
+    songDiv.insertBefore(expandBtn, songDiv.firstChild);
+  }
+  
   const tdiv = document.createElement('div'); tdiv.className='tuning';
   tdiv.dataset.id = tuning.id;
   tdiv.draggable = true;
@@ -163,6 +257,8 @@ function addTuningIncremental(songId, tuning) {
   tdiv.innerHTML = tinner;
   songDiv.appendChild(tdiv);
   attachHandlers();
+  attachDragHandlers();
+  attachExpandSongHandlers();
 }
 
 function deleteTuningIncremental(tuningId) {
@@ -250,42 +346,201 @@ document.addEventListener('contextmenu', (e)=>{
 let draggedElement = null;
 
 function attachDragHandlers() {
-  document.querySelectorAll('.artist, .song, .tuning').forEach(el => {
-    el.addEventListener('dragstart', (e) => {
-      draggedElement = el;
+  // Setup drag handles for songs (for song reparenting)
+  document.querySelectorAll('.song').forEach(song => {
+    // Remove old handle if exists
+    const oldHandle = song.querySelector('.drag-handle-song');
+    if (oldHandle) oldHandle.remove();
+    
+    // Create handle
+    const handle = document.createElement('span');
+    handle.textContent = '⠿ ';
+    handle.style.cssText = `
+        cursor: grab;
+        display: inline-block;
+        margin-right: 8px;
+        font-size: 16px;
+        user-select: none;
+        padding: 2px 4px;
+    `;
+    handle.title = 'Drag to move to another artist';
+    handle.className = 'drag-handle-song';
+    
+    // Insert at beginning of song
+    song.insertBefore(handle, song.firstChild);
+    
+    // Make handle draggable
+    handle.draggable = true;
+    
+    handle.ondragstart = (e) => {
+      draggedElement = song;
       e.dataTransfer.effectAllowed = 'move';
-      el.style.opacity = '0.5';
-    });
-    el.addEventListener('dragend', (e) => {
-      el.style.opacity = '1';
-      draggedElement = null;
-    });
-    el.addEventListener('dragover', (e) => {
+      e.dataTransfer.setData('text/plain', song.dataset.id);
+      song.style.opacity = '0.5';
+      e.stopPropagation();
+    };
+    
+    handle.ondragend = (e) => {
+      if (song) song.style.opacity = '1';
+      e.stopPropagation();
+    };
+    
+    // Prevent drag from song itself
+    song.ondragstart = (e) => {
+      e.preventDefault();
+      return false;
+    };
+  });
+
+  // Setup drag handles for tunings (for tuning reparenting)
+  document.querySelectorAll('.tuning').forEach(tuning => {
+    // Remove old handle if exists
+    const oldHandle = tuning.querySelector('.drag-handle-tuning');
+    if (oldHandle) oldHandle.remove();
+    
+    // Create handle
+    const handle = document.createElement('span');
+    handle.textContent = '⠿ ';
+    handle.style.cssText = `
+        cursor: grab;
+        display: inline-block;
+        margin-right: 8px;
+        font-size: 14px;
+        user-select: none;
+        padding: 2px 4px;
+    `;
+    handle.title = 'Drag to move to another song';
+    handle.className = 'drag-handle-tuning';
+    
+    // Insert at beginning
+    tuning.insertBefore(handle, tuning.firstChild);
+    handle.draggable = true;
+    
+    handle.ondragstart = (e) => {
+      draggedElement = tuning;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tuning.dataset.id);
+      tuning.style.opacity = '0.5';
+      e.stopPropagation();
+    };
+    
+    handle.ondragend = (e) => {
+      if (tuning) tuning.style.opacity = '1';
+      e.stopPropagation();
+    };
+    
+    tuning.ondragstart = (e) => {
+      e.preventDefault();
+      return false;
+    };
+  });
+
+  // Setup drop zones for artists (songs)
+  document.querySelectorAll('.artist').forEach(artist => {
+    artist.ondragover = (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-    });
-    el.addEventListener('drop', async (e) => {
+      artist.style.backgroundColor = '#e0e0e0';
+    };
+    
+    artist.ondragleave = (e) => {
+      if (e.target === artist) {
+        artist.style.backgroundColor = '';
+      }
+    };
+    
+    artist.ondrop = async (e) => {
       e.preventDefault();
-      if (!draggedElement || draggedElement === el) return;
-      // If dragging a song onto an artist -> reparent
-      const draggedType = draggedElement.classList.contains('song') ? 'song' : (draggedElement.classList.contains('tuning') ? 'tuning' : (draggedElement.classList.contains('artist') ? 'artist' : null));
-      const targetIsArtist = el.classList.contains('artist');
-      if (draggedType === 'song' && targetIsArtist) {
-        const songId = parseInt(draggedElement.dataset.id);
-        const newArtistId = parseInt(el.dataset.id);
-        try {
-          await fetchJSON(`/api/songs/${songId}/reparent`, {method:'PUT', body: JSON.stringify({artist_id: newArtistId})});
-          // move DOM node
-          const oldParent = draggedElement.parentElement.closest && draggedElement.parentElement.closest('.artist') ? draggedElement.parentElement.closest('.artist') : draggedElement.parentElement;
-          draggedElement.remove();
-          // append to target artist
-          el.appendChild(draggedElement);
-        } catch(err) {
-          alert('Move failed: '+err);
+      artist.style.backgroundColor = '';
+      
+      if (draggedElement && draggedElement.classList.contains('song')) {
+        const songEl = draggedElement;
+        const songId = parseInt(songEl.dataset.id);
+        const newArtistId = parseInt(artist.dataset.id);
+        
+        // Prevent moving to same artist
+        const currentArtist = songEl.closest('.artist');
+        if (currentArtist && parseInt(currentArtist.dataset.id) === newArtistId) {
+          draggedElement = null;
+          return;
         }
+        
+        try {
+          await fetchJSON(`/api/songs/${songId}/reparent`, {
+            method: 'PUT',
+            body: JSON.stringify({artist_id: newArtistId})
+          });
+          
+          // Move DOM node
+          songEl.remove();
+          artist.appendChild(songEl);
+          
+          // Re-attach handlers to maintain functionality
+          attachDragHandlers();
+        } catch(err) {
+          console.error('Move failed:', err);
+          alert('Move failed: ' + err);
+          if (songEl) songEl.style.opacity = '1';
+        }
+      }
+      draggedElement = null;
+    };
+  });
+
+  // Setup drop zones for songs (tunings)
+  document.querySelectorAll('.song').forEach(song => {
+    song.ondragover = (e) => {
+      if (draggedElement && draggedElement.classList.contains('tuning')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        song.style.backgroundColor = '#d4e6f1';
+      }
+    };
+    
+    song.ondragleave = (e) => {
+      if (e.target === song) {
+        song.style.backgroundColor = '';
+      }
+    };
+    
+    song.ondrop = async (e) => {
+      if (!draggedElement || !draggedElement.classList.contains('tuning')) return;
+      
+      e.preventDefault();
+      song.style.backgroundColor = '';
+      
+      const tuningEl = draggedElement;
+      const tuningId = parseInt(tuningEl.dataset.id);
+      const newSongId = parseInt(song.dataset.id);
+      
+      // Prevent moving to same song
+      const currentSong = tuningEl.closest('.song');
+      if (currentSong && parseInt(currentSong.dataset.id) === newSongId) {
+        draggedElement = null;
         return;
       }
-    });
+      
+      try {
+        await fetchJSON(`/api/tunings/${tuningId}/auth`, {
+          method: 'PUT',
+          body: JSON.stringify({name: tuningEl.textContent.replace('⠿ ', '').split(' - ')[0].trim(), 
+                                notes: tuningEl.textContent.includes(' - ') ? tuningEl.textContent.split(' - ')[1] : '', 
+                                song_id: newSongId})
+        });
+        
+        // Move DOM node
+        tuningEl.remove();
+        song.appendChild(tuningEl);
+        
+        // Re-attach handlers
+        attachDragHandlers();
+      } catch(err) {
+        console.error('Tuning move failed:', err);
+        alert('Tuning move failed: ' + err);
+        if (tuningEl) tuningEl.style.opacity = '1';
+      }
+      draggedElement = null;
+    };
   });
 }
 
@@ -301,7 +556,7 @@ async function loadAdminUsers() {
   try {
     const users = await fetchJSON('/api/admin/users');
     const adminUsersDiv = document.getElementById('admin-users');
-    adminUsersDiv.innerHTML = '<h3>👥 Users</h3>';
+    adminUsersDiv.innerHTML = '<h3>Users</h3>';
     for (const u of users) {
       const udiv = document.createElement('div'); udiv.className='admin-user';
       let inner = `<strong>${u.username}</strong> (id: ${u.id}) ${u.is_admin ? '[ADMIN]' : ''}`;
@@ -316,30 +571,26 @@ async function loadAdminUsers() {
     }
     attachAdminHandlers();
     await loadAuditLog();
-  } catch(e) { console.error('loadAdminUsers', e); const adminUsersDiv = document.getElementById('admin-users'); if(adminUsersDiv) adminUsersDiv.innerHTML = '<h3>👥 Users</h3><p>Error loading users</p>'; }
+  } catch(e) { console.error('loadAdminUsers', e); const adminUsersDiv = document.getElementById('admin-users'); if(adminUsersDiv) adminUsersDiv.innerHTML = '<h3>Users</h3><p>Error loading users</p>'; }
 }
 
 async function loadAuditLog() {
   try {
     const logs = await fetchJSON('/api/admin/audit-log');
-    const auditDiv = document.getElementById('audit-log');
-    if (!auditDiv) return;
-    auditDiv.innerHTML = '<h3>📋 Recent Activity</h3>';
+    const tbody = document.querySelector('#audit-log-table tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
     if (logs.length === 0) {
-      auditDiv.innerHTML += '<p style="color:#999;margin:0;">No activities recorded yet</p>';
+      tbody.innerHTML = '<tr><td colspan="5" style="padding: 8px; text-align: center; color: #999;">No activities recorded yet</td></tr>';
       return;
     }
-    const table = document.createElement('table');
-    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;';
-    table.innerHTML = '<tr style="background:#e8f4f8;"><th style="padding:6px;text-align:left;border-bottom:1px solid #ccc;">Action</th><th style="text-align:left;border-bottom:1px solid #ccc;">Target</th><th style="text-align:left;border-bottom:1px solid #ccc;">User ID</th><th style="text-align:left;border-bottom:1px solid #ccc;">Time</th></tr>';
-    for (const log of logs.slice(0, 20)) {
+    for (const log of logs) {
       const tr = document.createElement('tr');
-      tr.style.cssText = 'border-bottom:1px solid #eee;';
-      const time = log.timestamp ? new Date(log.timestamp).toLocaleString('en-US', {hour12: true}) : 'N/A';
-      tr.innerHTML = `<td style="padding:4px;">${log.action}</td><td style="padding:4px;">${log.target_type}#${log.target_id}</td><td style="padding:4px;">${log.user_id}</td><td style="padding:4px;font-size:11px;">${time}</td>`;
-      table.appendChild(tr);
+      tr.style.cssText = 'border-bottom: 1px solid #eee;';
+      const time = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A';
+      tr.innerHTML = `<td style="padding: 8px; border: 1px solid #ddd;">${time}</td><td style="padding: 8px; border: 1px solid #ddd;">${log.user_id}</td><td style="padding: 8px; border: 1px solid #ddd;">${log.action}</td><td style="padding: 8px; border: 1px solid #ddd;">${log.target_type}</td><td style="padding: 8px; border: 1px solid #ddd;">${log.target_id}</td>`;
+      tbody.appendChild(tr);
     }
-    auditDiv.appendChild(table);
   } catch(e) { console.error('loadAuditLog', e); }
 }
 
@@ -350,6 +601,8 @@ function attachAdminHandlers(){
   document.querySelectorAll('.edit-user').forEach(b=>b.onclick=async()=>{const newName = prompt('New username:', ''); if(newName===null) return; const newPass = prompt('New password (leave blank to keep):', ''); try{await fetchJSON(`/api/admin/users/${b.dataset.id}`,{method:'PUT', body:JSON.stringify({username:newName || undefined, password:newPass || undefined})}); await load(); await loadAdminUsers();}catch(e){alert('Edit failed: '+e)}});
   const refreshBtn = document.getElementById('admin-refresh');
   if (refreshBtn) refreshBtn.onclick = async ()=>{ await loadAdminUsers(); };
+  const refreshLogsBtn = document.getElementById('admin-refresh-logs');
+  if (refreshLogsBtn) refreshLogsBtn.onclick = async ()=>{ await loadAuditLog(); };
 }
 
 // Export handlers

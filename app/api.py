@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
@@ -81,7 +81,6 @@ def register(u: UserCreate):
 def login(u: UserCreate, response: Response):
     if authenticate_user(u.username, u.password):
         token = make_token(u.username)
-        # HttpOnly + SameSite to reduce CSRF surface (secure omitted for local dev)
         response.set_cookie(key="user", value=token, httponly=True, samesite="lax")
         return {"ok": True}
     raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -107,7 +106,7 @@ def me(request: Request):
     return {"user": u.username, "is_admin": bool(u.is_admin)}
 
 
-@app.get("/api/artists", response_model=List[ArtistOut])
+@app.get("/api/artists")
 def list_artists(request: Request):
     # Return per-user artists; admin sees all
     # Supports optional full tree loading: ?full=1 returns songs+tunings
@@ -125,7 +124,7 @@ def list_artists(request: Request):
             if uname:
                 user = db.query(User).filter_by(username=uname).first()
         if not user:
-            return []
+            return JSONResponse([])
         if user.is_admin:
             rows = db.query(Artist).all()
         else:
@@ -135,7 +134,7 @@ def list_artists(request: Request):
             # quick count to know whether to show expand control
             has_songs = db.query(Song).filter(Song.artist_id == a.id).first() is not None
             out.append({"id": a.id, "name": a.name, "has_songs": has_songs})
-        return out
+        return JSONResponse(out)
     finally:
         db.close()
 
@@ -188,7 +187,7 @@ class ArtistIn(BaseModel):
     name: str
 
 
-@app.post("/api/artists", response_model=ArtistOut)
+@app.post("/api/artists")
 def create_artist(a: ArtistIn, request: Request):
     user = _require_auth(request)
     db = SessionLocal()
@@ -199,9 +198,10 @@ def create_artist(a: ArtistIn, request: Request):
         art = Artist(name=a.name, owner_id=user.id)
         db.add(art)
         db.commit()
-        db.refresh(art)
-        log_action(user.id, 'create_artist', 'artist', art.id)
-        return ArtistOut.from_orm(art)
+        art_id = art.id
+        db.expunge(art)
+        log_action(user.id, 'create_artist', 'artist', art_id)
+        return {"id": art_id, "name": a.name, "songs": []}
     finally:
         db.close()
 
@@ -262,6 +262,7 @@ class SongUpdate(BaseModel):
 class TuningUpdate(BaseModel):
     name: Optional[str] = None
     notes: Optional[str] = None
+    song_id: Optional[int] = None
 
 
 @app.post("/api/tunings", response_model=TuningOut)
@@ -415,7 +416,7 @@ def reparent_song(song_id: int, data: ReparentIn, request: Request):
                 raise HTTPException(status_code=403)
         # uniqueness: ensure no song with same title at destination
         if db.query(Song).filter(Song.artist_id == data.artist_id, Song.title == s.title).first():
-            raise HTTPException(status_code=400, detail="Song title conflict on target artist")
+            raise HTTPException(status_code=400, detail="Song title already exists")
         s.artist_id = data.artist_id
         db.commit(); db.refresh(s)
         log_action(user.id, 'reparent_song', 'song', song_id)
@@ -446,7 +447,7 @@ def update_song_auth(song_id: int, sin: SongUpdate, request: Request):
         db.close()
 
 
-@app.put("/api/tunings/{tuning_id}/auth", response_model=TuningOut)
+@app.put("/api/tunings/{tuning_id}/auth")
 def update_tuning_auth(tuning_id: int, tin: TuningUpdate, request: Request):
     user = _require_auth(request)
     db = SessionLocal()
@@ -465,9 +466,21 @@ def update_tuning_auth(tuning_id: int, tin: TuningUpdate, request: Request):
             t.name = tin.name
         if tin.notes is not None:
             t.notes = tin.notes
-        db.commit(); db.refresh(t)
+        # Handle reparenting (moving to different song)
+        if tin.song_id is not None and tin.song_id != t.song_id:
+            new_song = db.get(Song, tin.song_id)
+            if not new_song:
+                raise HTTPException(status_code=404, detail="Target song not found")
+            # Verify user has access to target song
+            new_art = db.get(Artist, new_song.artist_id)
+            if not user.is_admin and new_art.owner_id != user.id:
+                raise HTTPException(status_code=403)
+            t.song_id = tin.song_id
+        db.commit()
+        # Convert to dict BEFORE closing session
+        result = {"id": t.id, "name": t.name, "notes": t.notes}
         log_action(user.id, 'update_tuning', 'tuning', tuning_id)
-        return TuningOut.from_orm(t)
+        return JSONResponse(result)
     finally:
         db.close()
 
@@ -595,7 +608,7 @@ def get_audit_log(request: Request):
                 "action": log.action,
                 "target_type": log.target_type,
                 "target_id": log.target_id,
-                "timestamp": log.timestamp.isoformat() if log.timestamp else None
+                "timestamp": log.timestamp if isinstance(log.timestamp, str) else (log.timestamp.isoformat() if log.timestamp else None)
             }
             for log in logs
         ]

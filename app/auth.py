@@ -70,8 +70,6 @@ def get_user_by_id(user_id: int):
 def set_admin(user_id: int, value: bool):
     db = SessionLocal()
     try:
-        #if value:
-          #  db.query(User).update({User.is_admin: False})
         u = db.get(User, user_id)
         if not u:
             return False
