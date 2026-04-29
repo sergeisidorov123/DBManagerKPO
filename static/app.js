@@ -513,7 +513,6 @@ function attachDragHandlers() {
       const tuningId = parseInt(tuningEl.dataset.id);
       const newSongId = parseInt(song.dataset.id);
       
-      // Prevent moving to same song
       const currentSong = tuningEl.closest('.song');
       if (currentSong && parseInt(currentSong.dataset.id) === newSongId) {
         draggedElement = null;
@@ -521,19 +520,24 @@ function attachDragHandlers() {
       }
       
       try {
-        await fetchJSON(`/api/tunings/${tuningId}/auth`, {
-          method: 'PUT',
-          body: JSON.stringify({name: tuningEl.textContent.replace('⠿ ', '').split(' - ')[0].trim(), 
-                                notes: tuningEl.textContent.includes(' - ') ? tuningEl.textContent.split(' - ')[1] : '', 
-                                song_id: newSongId})
-        });
-        
-        // Move DOM node
-        tuningEl.remove();
-        song.appendChild(tuningEl);
-        
-        // Re-attach handlers
-        attachDragHandlers();
+          const clone = tuningEl.cloneNode(true);
+          clone.querySelectorAll('.delete-btn, [data-action="delete"], button').forEach(btn => btn.remove());
+          const cleanText = clone.textContent.replace('⠿ ', '').trim();
+          cleanText = cleanText.replace('Delete', '').trim(); 
+          
+          await fetchJSON(`/api/tunings/${tuningId}/auth`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                  name: cleanText.split(' - ')[0]?.trim() || '', 
+                  notes: cleanText.includes(' - ') ? cleanText.split(' - ')[1]?.trim() || '' : '',
+                  song_id: newSongId
+              })
+          });
+          
+          tuningEl.remove();
+          song.appendChild(tuningEl);
+          
+          attachDragHandlers();
       } catch(err) {
         console.error('Tuning move failed:', err);
         alert('Tuning move failed: ' + err);

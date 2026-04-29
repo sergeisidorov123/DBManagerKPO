@@ -30,7 +30,6 @@ def register_user(username: str, password: str):
     try:
         if db.query(User).filter_by(username=username).first():
             return False, "User exists"
-        # If no users exist, make the first one admin
         is_first = db.query(User).count() == 0
         user = User(username=username, password_hash=generate_password_hash(password), is_admin=is_first)
         db.add(user)
